@@ -1,0 +1,673 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesh MQTT Bridge</title>
+<style>
+:root{
+  --bg:#f4f6f8; --panel:#fff; --panel2:#f0f3f6; --text:#1c2530; --muted:#66727f; --line:#dde3e9;
+  --accent:#1f7a4d; --accent-t:#fff; --ok:#1f8a4c; --warn:#b7791f; --bad:#c0392b; --info:#2b6cb0;
+  --warn-bg:#fff6e0; --bad-bg:#fdecea; --ok-bg:#e6f5ec; --info-bg:#e8f1fb; --shadow:0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12171c; --panel:#1b2229; --panel2:#232c35; --text:#e6ebf0; --muted:#8f9ba8; --line:#2c3742;
+    --accent:#3fb37a; --accent-t:#0c1a12; --ok:#4cc582; --warn:#e0a94a; --bad:#ee7263; --info:#6aa9ec;
+    --warn-bg:#33290f; --bad-bg:#3a1c19; --ok-bg:#12301f; --info-bg:#14263a; --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select{font:inherit;color:inherit}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+header .sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:600;background:var(--panel2);border:1px solid var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.pill.ok .dot{background:var(--ok)} .pill.warn .dot{background:var(--warn)} .pill.bad .dot{background:var(--bad)}
+.layout{display:flex;min-height:calc(100vh - 53px)}
+nav{width:190px;flex:none;padding:12px 8px;border-right:1px solid var(--line);background:var(--panel)}
+nav button{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 12px;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:550}
+nav button:hover{background:var(--panel2)}
+nav button.on{background:var(--panel2);color:var(--text)}
+nav button .badge{float:right;background:var(--accent);width:9px;height:9px;border-radius:50%;margin-top:6px}
+main{flex:1;min-width:0;padding:16px 20px 90px;max-width:1100px}
+h2{font-size:18px;margin:0 0 4px} .sub{color:var(--muted);margin:0 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+.card h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:650}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 14px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.big{font-size:26px;font-weight:650;line-height:1.1}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner{padding:10px 14px;border-radius:10px;margin:0 0 14px;border:1px solid var(--line);background:var(--panel)}
+.banner.warn{background:var(--warn-bg);border-color:var(--warn)} .banner.bad{background:var(--bad-bg);border-color:var(--bad)}
+.banner.ok{background:var(--ok-bg);border-color:var(--ok)} .banner.info{background:var(--info-bg);border-color:var(--info)}
+.banner ul{margin:6px 0 0 18px;padding:0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)} th{color:var(--muted);font-weight:600}
+td.mono,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+.btn{background:var(--panel2);border:1px solid var(--line);padding:7px 14px;border-radius:8px;cursor:pointer;font-weight:600}
+.btn:hover{filter:brightness(.97)} .btn:disabled{opacity:.5;cursor:default}
+.btn.primary{background:var(--accent);color:var(--accent-t);border-color:var(--accent)}
+.btn.danger{background:var(--bad);color:#fff;border-color:var(--bad)}
+.field{display:grid;grid-template-columns:minmax(150px,1fr) minmax(160px,1.2fr);gap:8px 16px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.field:last-child{border-bottom:0}
+.field .lbl{font-weight:550} .field .help{display:block;font-weight:400;color:var(--muted);font-size:12.5px;margin-top:1px}
+.field.changed{box-shadow:inset 3px 0 0 var(--accent);padding-left:10px;margin-left:-13px}
+.field .ctl{justify-self:end;width:100%;max-width:340px}
+.field .ctl.tog{width:auto}
+input[type=text],input[type=password],input[type=number],select{width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+input:disabled,select:disabled{opacity:.6}
+.sw{position:relative;display:inline-block;width:44px;height:24px}
+.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;background:var(--line);border-radius:999px;cursor:pointer;transition:.15s}
+.sw span::before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.sw input:checked+span{background:var(--accent)} .sw input:checked+span::before{transform:translateX(20px)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.sw input:disabled+span{opacity:.5;cursor:default}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.tag.primary{color:var(--ok);border-color:var(--ok)} .tag.secondary{color:var(--info);border-color:var(--info)}
+.savebar{position:fixed;left:190px;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:6;box-shadow:0 -4px 14px rgba(0,0,0,.08)}
+.savebar .msg{flex:1;min-width:0}
+.savebar[hidden]{display:none}
+#logtools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+#logtools select,#logtools input[type=text]{width:auto}
+#logbox{background:#0e1318;color:#d6dde4;border-radius:10px;padding:8px 10px;height:calc(100vh - 230px);min-height:260px;overflow:auto;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#logbox div{white-space:pre-wrap;word-break:break-word}
+#logbox .t{color:#71808f} #logbox .WARNING{color:#f0c060} #logbox .ERROR,#logbox .CRITICAL{color:#ff8478} #logbox .DEBUG{color:#8595a4}
+#logbox .MAP{color:#6fdc9c}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.modal h3{margin:0 0 8px}
+.hint{color:var(--muted);font-size:12.5px}
+.chan-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.chan-head .name{font-size:16px;font-weight:650}
+/* nodes */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input[type=text]{flex:1;min-width:180px;width:auto} .toolbar select{width:auto}
+.toolbar label.chk{display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer;white-space:nowrap}
+.toolbar label.chk input{width:auto}
+.summary{color:var(--muted);margin:0 0 10px}
+table.nodes{font-size:14px} table.nodes td{vertical-align:middle;padding:7px 8px;white-space:nowrap}
+table.nodes tr.node{cursor:pointer} table.nodes tr.node:hover{background:var(--panel2)}
+table.nodes tr.me{background:var(--ok-bg)}
+table.nodes tr.detail td{background:var(--panel2);padding:10px 14px}
+table.nodes tr.dim td{opacity:.55}
+.avatar{display:inline-flex;align-items:center;justify-content:center;min-width:46px;height:28px;padding:0 6px;border-radius:8px;font-size:12px;font-weight:650;white-space:nowrap}
+.nm{display:flex;gap:10px;align-items:center}
+.nm .t{min-width:0} .nm .t b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.nm .t span{color:var(--muted);font-size:12px}
+.star{color:#f0a500}
+.snr.ok{color:var(--ok)} .snr.warn{color:var(--warn)} .snr.bad{color:var(--bad)}
+.arrow{display:inline-block;font-size:13px;color:var(--muted);margin-left:6px}
+.lock{color:var(--ok)} .lock.open{color:var(--warn)}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 18px;font-size:13px}
+.dgrid div span{color:var(--muted);display:block;font-size:12px}
+@media (max-width:760px){
+  .hide-sm{display:none} .nm .t b{max-width:150px}
+  .layout{display:block} nav{width:auto;display:flex;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:6px}
+  nav button{white-space:nowrap;width:auto} main{padding:14px 12px 100px}
+  #nodename{display:none} .savebar{left:0} .field{grid-template-columns:1fr} .field .ctl{justify-self:stretch;max-width:none} .field .ctl.tog{justify-self:start}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mesh MQTT Bridge</h1>
+  <span id="nodename" class="hint"></span>
+  <span class="sp"></span>
+  <span id="pill" class="pill"><span class="dot"></span><span id="pilltext">Loading</span></span>
+</header>
+<div class="layout">
+  <nav id="nav"></nav>
+  <main id="main"></main>
+</div>
+<div id="savebar" class="savebar" hidden></div>
+<div id="modal"></div>
+
+<script>
+"use strict";
+/* ---------- tiny helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+function h(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "value" || k === "checked" || k === "disabled" || k === "selected") e[k] = v;
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) e.append(c instanceof Node ? c : String(c));
+  return e;
+}
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let j = null;
+  try { j = await r.json(); } catch (_) { /* not JSON */ }
+  if (!r.ok) { const e = new Error((j && j.error) || r.statusText); e.status = r.status; e.data = j; throw e; }
+  return j;
+}
+const post = (p, b) => api(p, { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "mesh-ui" }, body: JSON.stringify(b || {}) });
+const clone = o => JSON.parse(JSON.stringify(o));
+function dur(s) {
+  s = Math.max(0, Math.round(s));
+  const d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return `${d}d ${hh}h`; if (hh) return `${hh}h ${m}m`; if (m) return `${m}m ${s % 60}s`; return `${s}s`;
+}
+const ago = t => t ? dur(Date.now() / 1000 - t) + " ago" : "never";
+const clock = t => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
+const getp = (o, p) => p.split(".").reduce((a, k) => (a == null ? a : a[k]), o);
+function setp(o, p, v) { const ks = p.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => a[k], o); t[last] = v; }
+
+/* ---------- state ---------- */
+const S = {
+  tab: "dashboard", status: null, statusErr: null,
+  orig: null, draft: null, settingsErr: null, settingsLoading: false,
+  notice: null,             // banner after saving
+  awaitReload: false,       // settings must be re-read once the node is back
+  logs: [], lastLog: 0, logLevel: "INFO", logFilter: "", logPaused: false,
+};
+const TABS = [["dashboard", "Dashboard"], ["nodes", "Nodes"], ["mqtt", "MQTT & Map"], ["channels", "Channels"], ["device", "Device"], ["logs", "Logs"]];
+
+function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (_) { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* storage blocked: fine */ } }
+Object.assign(S, { nodes: null, nodesErr: null, nodeQuery: "", nodeOpen: new Set(),
+  nodeSort: lsGet("nodeSort", "heard"), nodeOnline: lsGet("nodeOnline", "0") === "1", units: lsGet("units", "mi") });
+
+/* ---------- payload / diff ---------- */
+const MQTT_STR = ["address", "username", "root"];
+function buildPayload() {
+  if (!S.orig || !S.draft) return {};
+  const p = {}, o = S.orig, d = S.draft;
+  const put = (path, v) => { const ks = path.split("."); const last = ks.pop(); let t = p; for (const k of ks) t = t[k] = t[k] || {}; t[last] = v; };
+  const cmp = path => { const a = getp(o, path), b = getp(d, path); if (a !== b) put(path, b); };
+  for (const k of ["enabled", "proxy_to_client_enabled", "map_reporting_enabled", "encryption_enabled", "json_enabled", "tls_enabled", ...MQTT_STR]) cmp("mqtt." + k);
+  for (const k of ["publish_interval_secs", "position_precision", "should_report_location"]) cmp("mqtt.map_report_settings." + k);
+  if (d.mqtt.password) put("mqtt.password", d.mqtt.password);
+  cmp("lora.config_ok_to_mqtt");
+  for (const c of o.channels) for (const k of ["uplink_enabled", "downlink_enabled", "position_precision"]) {
+    const a = c[k], b = d.chByIdx[c.index][k]; if (a !== b) put(`channels.${c.index}.${k}`, b);
+  }
+  if (o.owner.known || d.owner.long_name || d.owner.short_name) {
+    if (d.owner.long_name !== o.owner.long_name && d.owner.long_name) put("owner.long_name", d.owner.long_name);
+    if (d.owner.short_name !== o.owner.short_name && d.owner.short_name) put("owner.short_name", d.owner.short_name);
+  }
+  return p;
+}
+const countChanges = p => { let n = 0; const walk = x => { for (const v of Object.values(x)) (v && typeof v === "object") ? walk(v) : n++; }; walk(p); return n; };
+
+function newDraft(s) {
+  const d = clone(s);
+  d.mqtt.password = "";
+  d.chByIdx = {}; for (const c of d.channels) d.chByIdx[c.index] = c;
+  return d;
+}
+
+/* ---------- live hints (server re-checks on save) ---------- */
+function hints() {
+  const out = [], d = S.draft; if (!d) return out;
+  const m = d.mqtt, rs = m.map_report_settings;
+  if (m.map_reporting_enabled) {
+    if (!m.enabled || !m.proxy_to_client_enabled) out.push("Map reporting is on, but MQTT or the client proxy is off, so nothing will be sent.");
+    if (!rs.should_report_location) out.push("Map reporting is on but \"Share location\" is off; the node will probably not send reports.");
+    if (!d.lora.config_ok_to_mqtt) out.push("\"OK to MQTT\" is off; meshmap.net lists it as a requirement.");
+    if (rs.position_precision !== 0 && (rs.position_precision < 10 || rs.position_precision > 16)) out.push("meshmap.net accepts map precision of 10-16 bits (23.3 km to 364 m).");
+    if (rs.position_precision === 0) out.push("Precision 0 means your location is not shared, so you will not appear on the map.");
+  }
+  for (const c of d.channels) {
+    if (c.uplink_enabled && c.role !== "PRIMARY") out.push(`Channel ${c.index} (${c.name || "unnamed"}) has uplink on and is not the primary channel: its traffic goes to the MQTT server.`);
+    if (c.uplink_enabled && c.position_precision === 32) out.push(`Channel ${c.index} shares exact positions and has uplink on.`);
+  }
+  return out;
+}
+
+/* ---------- field builders ---------- */
+function fieldRow(label, help, ctl, path, tog) {
+  return h("div", { class: "field", "data-path": path || "" },
+    h("div", { class: "lbl" }, label, help ? h("span", { class: "help" }, help) : null),
+    h("div", { class: "ctl" + (tog ? " tog" : "") }, ctl));
+}
+function toggle(path, label, help, opts = {}) {
+  const box = h("input", { type: "checkbox", checked: !!getp(S.draft, path), disabled: opts.disabled, onchange: e => { setp(S.draft, path, e.target.checked); afterEdit(); } });
+  return fieldRow(label, help, h("label", { class: "sw" }, box, h("span")), path, true);
+}
+function text(path, label, help, opts = {}) {
+  const inp = h("input", { type: opts.password ? "password" : "text", value: getp(S.draft, path) ?? "", placeholder: opts.placeholder || "", maxlength: opts.max, autocomplete: "off", spellcheck: "false",
+    oninput: e => { setp(S.draft, path, e.target.value); afterEdit(); } });
+  return fieldRow(label, help, inp, path);
+}
+function select(path, label, help, options, numeric = true) {
+  const cur = getp(S.draft, path);
+  const opts = options.slice(); if (!opts.some(o => o[0] === cur)) opts.push([cur, String(cur)]);
+  const sel = h("select", { onchange: e => { setp(S.draft, path, numeric ? Number(e.target.value) : e.target.value); afterEdit(); } },
+    opts.map(([v, l]) => h("option", { value: v, selected: v === cur }, l)));
+  return fieldRow(label, help, sel, path);
+}
+const precisionOpts = () => Object.keys(S.orig.precision_text).map(Number).sort((a, b) => a - b)
+  .map(b => [b, b === 0 ? "0 - location not shared" : b === 32 ? "32 - exact" : `${b} bits - about ${S.orig.precision_text[b]}`]);
+const intervalOpts = [[3600, "Every hour"], [7200, "Every 2 hours"], [10800, "Every 3 hours"], [21600, "Every 6 hours"], [43200, "Every 12 hours"], [86400, "Every day"]];
+
+/* mark changed fields (dot after label) without rebuilding the form, so typing keeps focus */
+function refreshMarks() {
+  if (!S.orig) return;
+  const p = buildPayload();
+  const flat = new Set(); const walk = (x, pre) => { for (const [k, v] of Object.entries(x)) (v && typeof v === "object") ? walk(v, pre + k + ".") : flat.add(pre + k); }; walk(p, "");
+  document.querySelectorAll(".field[data-path]").forEach(el => {
+    const path = el.dataset.path; if (!path) return;
+    let key = path;
+    if (path.startsWith("chByIdx.")) key = "channels." + path.slice(8);
+    el.classList.toggle("changed", flat.has(key));
+  });
+}
+function afterEdit() { refreshMarks(); renderSaveBar(); renderNavBadge(); const hb = $("#hintbox"); if (hb) fillHints(hb); }
+function fillHints(el) {
+  el.replaceChildren();
+  const hs = hints();
+  if (hs.length) el.append(h("div", { class: "banner warn" }, h("b", {}, "Heads up"), h("ul", {}, hs.map(x => h("li", {}, x)))));
+}
+
+/* ---------- save flow ---------- */
+function renderSaveBar() {
+  const bar = $("#savebar"); const n = countChanges(buildPayload());
+  bar.hidden = n === 0;
+  if (!n) return;
+  bar.replaceChildren(
+    h("div", { class: "msg" }, h("b", {}, `${n} unsaved change${n > 1 ? "s" : ""}`), h("div", { class: "hint" }, "Saving reboots the node (about 30 seconds); the proxy reconnects by itself.")),
+    h("button", { class: "btn", onclick: discard }, "Discard"),
+    h("button", { class: "btn primary", id: "savebtn", onclick: () => save(false) }, "Save to node"));
+}
+function renderNavBadge() {
+  const n = countChanges(buildPayload());
+  document.querySelectorAll("nav .badge").forEach(b => b.remove());
+  if (n) { const b = [...document.querySelectorAll("nav button")].filter(x => ["mqtt", "channels", "device"].includes(x.dataset.tab)); /* changes can be on several tabs */
+    const p = buildPayload();
+    const on = { mqtt: !!(p.mqtt), channels: !!p.channels, device: !!(p.lora || p.owner) };
+    b.forEach(x => { if (on[x.dataset.tab]) x.append(h("span", { class: "badge", title: "Unsaved changes" })); }); }
+}
+function discard() { S.draft = newDraft(S.orig); render(); renderSaveBar(); }
+
+async function save(confirm) {
+  const p = buildPayload(); if (confirm) p.confirm = true;
+  const btn = $("#savebtn"); if (btn) btn.disabled = true;
+  try {
+    const r = await post("/api/settings", p);
+    closeModal();
+    S.notice = { kind: r.changed ? "ok" : "info", text: r.message, warnings: r.warnings || [] };
+    S.awaitReload = !!r.changed;
+    if (r.changed) { S.orig = null; S.draft = null; }
+    S.tab = "dashboard"; render(); renderSaveBar(); pollStatus();
+  } catch (e) {
+    if (e.status === 409 && e.data) { showConfirm(e.data); }
+    else { closeModal(); alertBox("Could not save", e.message); }
+    if (btn) btn.disabled = false;
+  }
+}
+function closeModal() { $("#modal").replaceChildren(); }
+function alertBox(title, msg) {
+  $("#modal").replaceChildren(h("div", { class: "modal" }, h("div", { class: "box" }, h("h3", {}, title), h("p", {}, msg),
+    h("div", { class: "row", style: "justify-content:flex-end" }, h("button", { class: "btn", onclick: closeModal }, "Close")))));
+}
+function showConfirm(d) {
+  $("#modal").replaceChildren(h("div", { class: "modal" }, h("div", { class: "box" },
+    h("h3", {}, "Please confirm"),
+    h("div", { class: "banner bad" }, h("ul", { style: "margin:0 0 0 18px;padding:0" }, d.risks.map(r => h("li", {}, r)))),
+    h("table", {}, h("tr", {}, h("th", {}, "Setting"), h("th", {}, "From"), h("th", {}, "To")),
+      d.changes.map(c => h("tr", {}, h("td", {}, `${c.section}: ${c.label}`), h("td", { class: "mono" }, String(c.old)), h("td", { class: "mono" }, String(c.new))))),
+    h("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+      h("button", { class: "btn", onclick: closeModal }, "Cancel"),
+      h("button", { class: "btn danger", onclick: () => save(true) }, "Apply anyway")))));
+}
+
+/* ---------- views ---------- */
+function kv(rows) { return h("dl", { class: "kv" }, rows.filter(Boolean).map(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])); }
+
+function viewDashboard() {
+  const st = S.status, root = h("div");
+  if (S.notice) root.append(h("div", { class: "banner " + S.notice.kind }, S.notice.text,
+    S.notice.warnings.length ? h("ul", {}, S.notice.warnings.map(w => h("li", {}, w))) : null));
+  if (!st) { root.append(h("div", { class: "banner" }, S.statusErr ? "Cannot reach the service: " + S.statusErr : "Loading...")); return root; }
+  root.append(h("h2", {}, "Dashboard"), h("p", { class: "sub" }, "Live status of the Bluetooth link, the MQTT connection and what has been relayed."));
+
+  const linkTxt = { connected: "Connected", connecting: "Connecting...", waiting: "Waiting to retry", starting: "Starting", stopped: "Stopped" }[st.state] || st.state;
+  const retry = st.state === "waiting" && st.retry_at ? `in ${Math.max(0, Math.round(st.retry_at - st.now))}s` : null;
+  const link = h("div", { class: "card" }, h("h3", {}, "Bluetooth link"),
+    h("div", { class: "big" }, linkTxt),
+    kv([["Node address", h("span", { class: "mono" }, st.address)], ["In this state", dur(st.now - st.state_since)], retry ? ["Next attempt", retry] : null]),
+    st.last_error && st.state !== "connected" ? h("p", { class: "hint mono" }, st.last_error) : null,
+    h("div", { class: "row", style: "margin-top:10px" }, h("button", { class: "btn", onclick: async () => { try { await post("/api/reconnect"); pollStatus(); } catch (e) { alertBox("Error", e.message); } } }, "Reconnect")));
+
+  const b = st.broker;
+  const broker = h("div", { class: "card" }, h("h3", {}, "MQTT broker"),
+    h("div", { class: "big" }, st.broker_connected ? "Connected" : "Not connected"),
+    b ? kv([["Server", h("span", { class: "mono" }, `${b.host}:${b.port}${b.tls ? " (TLS)" : ""}`)], ["Root topic", h("span", { class: "mono" }, b.root)],
+      ["Downlink", st.downlink ? "on" : "off"]]) : h("p", { class: "hint" }, "Known once the node has connected."));
+
+  const mapAge = st.last_map_report;
+  const mapCard = h("div", { class: "card" }, h("h3", {}, "Map report"),
+    h("div", { class: "big" }, mapAge ? ago(mapAge) : "None yet"),
+    kv([["Last sent", mapAge ? clock(mapAge) : "-"], ["Sent to broker", st.by_kind.map || 0]]),
+    h("p", { class: "hint" }, "Map reports are sent about once an hour by default. Sites such as meshmap.net update about a minute later."));
+
+  const traffic = h("div", { class: "card" }, h("h3", {}, "Traffic since start"),
+    kv([["Uplink (node → broker)", st.stats.up], ["Uplink dropped", st.stats.up_dropped], ["Downlink (broker → node)", st.stats.down],
+      ["By type", Object.keys(st.by_kind).length ? Object.entries(st.by_kind).map(([k, v]) => `${k}: ${v}`).join(", ") : "-"]]));
+
+  const n = st.node;
+  const nodeCard = h("div", { class: "card" }, h("h3", {}, "Node"),
+    n ? kv([["Name", n.long_name ? `${n.long_name} (${n.short_name || ""})` : "-"], ["ID", h("span", { class: "mono" }, n.id || "-")], ["Firmware", n.firmware || "-"], ["Hardware", n.hardware || "-"]])
+      : h("p", { class: "hint" }, "Not connected."));
+
+  const sy = st.system || {};
+  const pi = h("div", { class: "card" }, h("h3", {}, "This computer"),
+    kv([sy.hostname ? ["Host", sy.hostname] : null, ["Proxy running", dur(st.service_uptime_s)], sy.host_uptime_s != null ? ["Host uptime", dur(sy.host_uptime_s)] : null,
+      sy.load ? ["Load (1/5/15 min)", sy.load.join(" / ")] : null, sy.mem_total_mb ? ["Memory", `${sy.mem_used_mb} / ${sy.mem_total_mb} MB`] : null,
+      sy.cpu_temp_c != null ? ["CPU temperature", sy.cpu_temp_c + " °C"] : null]));
+
+  root.append(h("div", { class: "grid" }, link, broker, mapCard, traffic, nodeCard, pi));
+
+  root.append(h("h2", { style: "margin-top:22px" }, "Recent messages relayed"),
+    st.recent.length ? h("div", { class: "card", style: "padding:6px 10px;overflow:auto" }, h("table", {},
+      h("tr", {}, h("th", {}, "Time"), h("th", {}, "Type"), h("th", {}, "Topic"), h("th", {}, "Bytes")),
+      st.recent.map(r => h("tr", {}, h("td", {}, clock(r.t)), h("td", {}, r.kind), h("td", { class: "mono" }, r.topic), h("td", {}, r.bytes)))))
+      : h("p", { class: "hint" }, "Nothing relayed yet since the service started."));
+  return root;
+}
+
+function needSettings(view) {
+  const root = h("div");
+  if (S.settingsErr) {
+    root.append(h("div", { class: "banner warn" }, S.settingsErr,
+      h("div", { style: "margin-top:8px" }, h("button", { class: "btn", onclick: loadSettings }, "Try again"))));
+    return root;
+  }
+  if (!S.draft) { root.append(h("div", { class: "banner" }, "Loading settings from the node...")); return root; }
+  root.append(view());
+  return root;
+}
+
+function viewMqtt() {
+  const root = h("div");
+  root.append(h("h2", {}, "MQTT & Map"), h("p", { class: "sub" }, "How the node publishes to MQTT and to the public map. Changes are written to the node."));
+  root.append(h("div", { id: "hintbox" }));
+  const c1 = h("div", { class: "card", style: "margin-bottom:14px" }, h("h3", {}, "MQTT"),
+    toggle("mqtt.enabled", "MQTT enabled", "Master switch for all MQTT output from the node."),
+    toggle("mqtt.proxy_to_client_enabled", "MQTT client proxy", "The node hands its MQTT messages to a connected client (this Pi) instead of using its own network. Required for this bridge."),
+    text("mqtt.address", "Server", "Leave blank for the public server (mqtt.meshtastic.org).", { placeholder: "mqtt.meshtastic.org", max: 63 }),
+    text("mqtt.username", "Username", "Blank uses the default for the public server.", { max: 63 }),
+    text("mqtt.password", "Password", S.orig.mqtt.password_set ? "A password is set. Type here only to replace it." : "None set (the public server default is used).", { password: true, max: 63, placeholder: S.orig.mqtt.password_set ? "unchanged" : "" }),
+    text("mqtt.root", "Root topic", "For example msh/US/CA. Blank uses msh/<region>.", { max: 31, placeholder: "msh/" + S.orig.lora.region }),
+    toggle("mqtt.encryption_enabled", "Encryption enabled", "Publish channel packets encrypted. Keep on unless you know why not."),
+    toggle("mqtt.json_enabled", "JSON output", "Also publish packets as JSON (needs the channel to allow it)."),
+    toggle("mqtt.tls_enabled", "TLS", "Use a secure connection to the server."));
+  const c2 = h("div", { class: "card" }, h("h3", {}, "Map reporting"),
+    toggle("mqtt.map_reporting_enabled", "Map reporting", "Publish this node's position and details to the public map."),
+    toggle("mqtt.map_report_settings.should_report_location", "Share location", "Consent flag for the map. If this is off the node usually sends no map reports. Saving the MQTT screen in a phone app can turn it off."),
+    select("mqtt.map_report_settings.position_precision", "Map precision", "How exactly the map shows you. meshmap.net accepts 10-16 bits; 16 (about 364 m) is the finest.", precisionOpts()),
+    select("mqtt.map_report_settings.publish_interval_secs", "Report interval", "Firmware minimum is one hour.", intervalOpts),
+    toggle("lora.config_ok_to_mqtt", "OK to MQTT", "Says other people may forward your packets to MQTT. meshmap.net lists it as a requirement."));
+  root.append(c1, c2);
+  fillHints($("#hintbox", root) || h("div"));
+  queueMicrotask(() => { const hb = $("#hintbox"); if (hb) fillHints(hb); refreshMarks(); });
+  return root;
+}
+
+function viewChannels() {
+  const root = h("div");
+  root.append(h("h2", {}, "Channels"), h("p", { class: "sub" }, "Uplink publishes what the node hears on a channel to the MQTT server. Keep it off for private channels."));
+  root.append(h("div", { id: "hintbox" }));
+  for (const c of S.orig.channels) {
+    const i = c.index, base = `chByIdx.${i}.`;
+    root.append(h("div", { class: "card", style: "margin-bottom:14px" },
+      h("div", { class: "chan-head" }, h("span", { class: "name" }, c.name || "(unnamed, uses the preset name)"),
+        h("span", { class: "tag " + c.role.toLowerCase() }, c.role.toLowerCase()), h("span", { class: "tag" }, "index " + i), h("span", { class: "tag" }, c.key)),
+      toggle(base + "uplink_enabled", "Uplink", i === 0 ? "Needed on the primary channel for map reports to be relayed." : "Publishes this channel's traffic to the MQTT server."),
+      toggle(base + "downlink_enabled", "Downlink", "Lets the node receive this channel's traffic from the MQTT server."),
+      select(base + "position_precision", "Position precision", "How exactly your position is shared on this channel (32 is exact).", precisionOpts())));
+  }
+  if (!S.orig.channels.length) root.append(h("div", { class: "banner" }, "No channels were reported by the node."));
+  queueMicrotask(() => { const hb = $("#hintbox"); if (hb) fillHints(hb); refreshMarks(); });
+  return root;
+}
+
+function viewDevice() {
+  const o = S.orig, root = h("div");
+  root.append(h("h2", {}, "Device"), h("p", { class: "sub" }, "Names and read-only radio settings."));
+  root.append(h("div", { class: "card", style: "margin-bottom:14px" }, h("h3", {}, "Owner"),
+    o.owner.known ? null : h("p", { class: "hint" }, "The current names are not known (the node list may be switched off with load_nodes). You can still set new ones."),
+    text("owner.long_name", "Long name", "Up to 39 characters.", { max: 39 }),
+    text("owner.short_name", "Short name", "Up to 4 characters.", { max: 4 })));
+  root.append(h("div", { class: "card" }, h("h3", {}, "Radio (read only)"),
+    kv([["Region", o.lora.region], ["Modem preset", o.lora.modem_preset]]),
+    h("p", { class: "hint" }, "Region and preset are not editable here on purpose; a wrong region can break your radio's legal compliance. Use the Meshtastic app or CLI.")));
+  return root;
+}
+
+/* ---------- nodes ---------- */
+const NODE_ONLINE_S = 2 * 3600;
+function fmtDist(m) {
+  if (m == null) return "-";
+  if (S.units === "km") return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`;
+  const ft = m * 3.28084;
+  return ft < 528 ? `${Math.round(ft)} ft` : `${(m / 1609.344).toFixed(m < 16093 ? 2 : 1)} mi`;
+}
+function hopsText(n) {
+  let t = n.hops == null ? "Unknown" : n.hops === 0 ? "Direct" : `${n.hops} hop${n.hops > 1 ? "s" : ""} away`;
+  return n.via_mqtt ? t + " \u00B7 MQTT" : t;
+}
+function avatar(n) {
+  const c = n.num & 0xFFFFFF, r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
+  const dark = (0.299 * r + 0.587 * g + 0.114 * b) < 140;
+  return h("span", { class: "avatar", style: `background:rgb(${r},${g},${b});color:${dark ? "#fff" : "#111"}` },
+    (n.short_name || n.id.replace("!", "").slice(-4)).slice(0, 4));
+}
+function nodeName(n) { return n.long_name || n.short_name || n.id; }
+function agoT(t, now) { return t ? dur(now - t) + " ago" : "never"; }
+function nodeMatches(n, q) {
+  return !q || [n.long_name, n.short_name, n.id, n.hw, n.role].some(x => (x || "").toLowerCase().includes(q));
+}
+const SORTS = {
+  heard: (a, b) => (b.last_heard || 0) - (a.last_heard || 0),
+  distance: (a, b) => (a.distance_m ?? Infinity) - (b.distance_m ?? Infinity),
+  name: (a, b) => nodeName(a).toLowerCase().localeCompare(nodeName(b).toLowerCase()),
+  snr: (a, b) => (b.snr ?? -Infinity) - (a.snr ?? -Infinity),
+  hops: (a, b) => (a.hops ?? Infinity) - (b.hops ?? Infinity),
+};
+function nodeDetail(n, now) {
+  const items = [["ID", n.id], ["Role", n.role], ["Hardware", n.hw || "-"], ["Last heard", n.last_heard ? new Date(n.last_heard * 1000).toLocaleString() : "never"],
+    ["Position", n.lat != null ? `${n.lat.toFixed(5)}, ${n.lon.toFixed(5)}${n.alt != null ? ` (${Math.round(n.alt)} m)` : ""}` : "unknown"],
+    ["Battery", n.battery == null ? "-" : n.battery > 100 ? "powered" : n.battery + "%"], ["Voltage", n.voltage == null ? "-" : n.voltage.toFixed(2) + " V"],
+    ["Channel utilisation", n.ch_util == null ? "-" : n.ch_util.toFixed(1) + " %"], ["Air util (tx)", n.air_util == null ? "-" : n.air_util.toFixed(1) + " %"],
+    ["Uptime", n.uptime == null ? "-" : dur(n.uptime)], ["Encryption", n.encrypted ? "public-key capable" : "no public key known"],
+    ["Bearing", n.bearing == null ? "-" : n.bearing + "\u00B0"]];
+  const g = h("div", { class: "dgrid" }, items.map(([k, v]) => h("div", {}, h("span", {}, k), v)));
+  if (n.lat != null) g.append(h("div", {}, h("span", {}, "Map"), h("a", { href: `https://www.openstreetmap.org/?mlat=${n.lat}&mlon=${n.lon}#map=14/${n.lat}/${n.lon}`, target: "_blank", rel: "noopener noreferrer" }, "OpenStreetMap \u2197")));
+  return g;
+}
+function paintNodes() {
+  const box = $("#nodelist"), sum = $("#nodesum"); if (!box) return;
+  const d = S.nodes; if (!d || !d.enabled) return;
+  const q = S.nodeQuery.trim().toLowerCase();
+  let rows = d.nodes.filter(n => nodeMatches(n, q) && (!S.nodeOnline || n.is_me || (n.last_heard && d.now - n.last_heard <= NODE_ONLINE_S)));
+  rows.sort(SORTS[S.nodeSort] || SORTS.heard);
+  rows = [...rows.filter(n => n.is_me), ...rows.filter(n => !n.is_me)];
+  sum.textContent = `${d.online} online \u00B7 ${rows.length} shown \u00B7 ${d.total} total`;
+  const heardNow = d.now;
+  const trs = [];
+  for (const n of rows.slice(0, 600)) {
+    const open = S.nodeOpen.has(n.num);
+    const old = !n.is_me && (!n.last_heard || heardNow - n.last_heard > NODE_ONLINE_S);
+    const snr = n.snr == null ? "-" : h("span", { class: "snr " + (n.snr >= 5 ? "ok" : n.snr >= 0 ? "warn" : "bad") }, n.snr.toFixed(1) + " dB");
+    const batt = n.battery == null ? "-" : n.battery > 100 ? `PWR${n.voltage ? " " + n.voltage.toFixed(2) + " V" : ""}` : `${Math.round(n.battery)}%${n.voltage ? " " + n.voltage.toFixed(2) + " V" : ""}`;
+    trs.push(h("tr", { class: "node" + (n.is_me ? " me" : "") + (old ? " dim" : ""), onclick: () => { open ? S.nodeOpen.delete(n.num) : S.nodeOpen.add(n.num); paintNodes(); } },
+      h("td", {}, h("div", { class: "nm" }, avatar(n), h("div", { class: "t" },
+        h("b", {}, n.favorite ? h("span", { class: "star" }, "\u2605 ") : null, nodeName(n), n.is_me ? " (this node)" : ""), h("span", {}, n.id)))),
+      h("td", { class: "hide-sm" }, n.is_me ? "-" : hopsText(n)),
+      h("td", {}, n.is_me ? "now" : agoT(n.last_heard, heardNow)),
+      h("td", {}, fmtDist(n.distance_m), n.bearing != null ? h("span", { class: "arrow", title: n.bearing + "\u00B0 from your node", style: `transform:rotate(${n.bearing}deg)` }, "\u25B2") : null),
+      h("td", { class: "hide-sm" }, snr),
+      h("td", { class: "hide-sm" }, batt),
+      h("td", { class: "hide-sm" }, n.hw || "-"),
+      h("td", { title: n.encrypted ? "Public key known" : "No public key known" }, h("span", { class: "lock" + (n.encrypted ? "" : " open") }, n.encrypted ? "\uD83D\uDD12" : "\uD83D\uDD13"))));
+    if (open) trs.push(h("tr", { class: "detail" }, h("td", { colspan: 8 }, nodeDetail(n, heardNow))));
+  }
+  const scroller = box.parentElement, y = scroller.scrollTop;
+  box.replaceChildren(...(trs.length ? trs : [h("tr", {}, h("td", { colspan: 8, class: "hint" }, d.total ? "No nodes match your filter." : "The node has not reported any nodes yet."))]));
+  scroller.scrollTop = y;
+  const note = $("#nodenote");
+  if (note) {
+    const bits = [];
+    if (d.stale) bits.push("The node is reconnecting; showing the last list received.");
+    if (!d.origin) bits.push("Distances need a position for your node. Give it a fixed position, or set latitude/longitude in the [web] section of the config.");
+    else if (d.origin.source === "config") bits.push("Distances are measured from the position set in the config file.");
+    note.replaceChildren(...bits.map(b => h("div", { class: "banner " + (d.stale ? "warn" : "info") }, b)));
+  }
+}
+function viewNodes() {
+  const root = h("div");
+  root.append(h("h2", {}, "Nodes"), h("p", { class: "sub" }, "Nodes your node has heard, like the Meshtastic apps show, with distance from your node. Click a row for details."));
+  if (S.nodesErr && !S.nodes) root.append(h("div", { class: "banner warn" }, S.nodesErr));
+  else if (!S.nodes) root.append(h("div", { class: "banner" }, "Loading nodes..."));
+  else if (!S.nodes.enabled) { root.append(h("div", { class: "banner warn" }, "The node list is not being downloaded. Set ", h("code", {}, "load_nodes = true"), " under [radio] in the config and restart the service.")); return root; }
+  else {
+    const q = h("input", { type: "text", placeholder: "Search name, ID, model...", value: S.nodeQuery, oninput: e => { S.nodeQuery = e.target.value; paintNodes(); } });
+    const sort = h("select", { onchange: e => { S.nodeSort = e.target.value; lsSet("nodeSort", S.nodeSort); paintNodes(); } },
+      [["heard", "Last heard"], ["distance", "Distance"], ["name", "Name"], ["snr", "Signal (SNR)"], ["hops", "Hops"]].map(([v, l]) => h("option", { value: v, selected: v === S.nodeSort }, "Sort: " + l)));
+    const units = h("select", { onchange: e => { S.units = e.target.value; lsSet("units", S.units); paintNodes(); } },
+      [["mi", "Miles"], ["km", "Kilometres"]].map(([v, l]) => h("option", { value: v, selected: v === S.units }, l)));
+    const online = h("label", { class: "chk" }, h("input", { type: "checkbox", checked: S.nodeOnline, onchange: e => { S.nodeOnline = e.target.checked; lsSet("nodeOnline", S.nodeOnline ? "1" : "0"); paintNodes(); } }), "Online only");
+    root.append(h("div", { id: "nodenote" }), h("p", { class: "summary", id: "nodesum" }), h("div", { class: "toolbar" }, q, sort, units, online),
+      h("div", { class: "card", style: "padding:4px 8px;overflow:auto" }, h("table", { class: "nodes" },
+        h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", { class: "hide-sm" }, "Connection"), h("th", {}, "Last heard"), h("th", {}, "Distance"), h("th", { class: "hide-sm" }, "SNR"), h("th", { class: "hide-sm" }, "Power"), h("th", { class: "hide-sm" }, "Model"), h("th", {}, ""))),
+        h("tbody", { id: "nodelist" }))));
+    queueMicrotask(paintNodes);
+  }
+  return root;
+}
+async function pollNodes() {
+  if (S.tab !== "nodes" || document.hidden) return;
+  const had = !!S.nodes;
+  try { S.nodes = await api("/api/nodes"); S.nodesErr = null; }
+  catch (e) { S.nodesErr = e.message; }
+  if (S.tab !== "nodes") return;
+  if (!had || (S.nodes && !S.nodes.enabled)) render(); else paintNodes();
+}
+
+let logTimer = null;
+function viewLogs() {
+  const root = h("div");
+  root.append(h("h2", {}, "Logs"), h("p", { class: "sub" }, "Output of the proxy service since it last started. For older history use journalctl -u mesh-mqtt-proxy."));
+  const box = h("div", { id: "logbox" });
+  const levelSel = h("select", { onchange: e => { S.logLevel = e.target.value; paintLogs(true); } },
+    ["DEBUG", "INFO", "WARNING", "ERROR"].map(l => h("option", { value: l, selected: l === S.logLevel }, l === "DEBUG" ? "All (debug)" : l === "INFO" ? "Info and above" : l === "WARNING" ? "Warnings and errors" : "Errors only")));
+  const filt = h("input", { type: "text", placeholder: "Filter text...", value: S.logFilter, oninput: e => { S.logFilter = e.target.value; paintLogs(true); } });
+  const pause = h("button", { class: "btn", onclick: e => { S.logPaused = !S.logPaused; e.target.textContent = S.logPaused ? "Resume" : "Pause"; } }, S.logPaused ? "Resume" : "Pause");
+  const dl = h("button", { class: "btn", onclick: downloadLogs }, "Download");
+  root.append(h("div", { id: "logtools" }, levelSel, filt, pause, dl), box);
+  queueMicrotask(() => paintLogs(true));
+  return root;
+}
+const LV = { DEBUG: 10, INFO: 20, WARNING: 30, ERROR: 40, CRITICAL: 50 };
+const fmtLog = l => `${new Date(l.t * 1000).toLocaleTimeString([], { hour12: false })} ${l.level.padEnd(7)} ${l.msg}`;
+function visibleLogs() {
+  const f = S.logFilter.toLowerCase();
+  return S.logs.filter(l => LV[l.level] >= LV[S.logLevel] && (!f || l.msg.toLowerCase().includes(f)));
+}
+function paintLogs() {
+  const box = $("#logbox"); if (!box) return;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const rows = visibleLogs().slice(-600);
+  box.replaceChildren(...rows.map(l => {
+    const cls = l.msg.includes("MAP REPORT") ? "MAP" : l.level;
+    return h("div", { class: cls }, h("span", { class: "t" }, new Date(l.t * 1000).toLocaleTimeString([], { hour12: false }) + " "), l.level.padEnd(7) + " " + l.msg);
+  }));
+  if (atBottom || !box.dataset.init) { box.scrollTop = box.scrollHeight; box.dataset.init = "1"; }
+}
+function downloadLogs() {
+  const blob = new Blob([visibleLogs().map(fmtLog).join("\n") + "\n"], { type: "text/plain" });
+  const a = h("a", { href: URL.createObjectURL(blob), download: "mesh-mqtt-proxy.log" }); document.body.append(a); a.click(); a.remove();
+}
+async function pollLogs() {
+  if (S.tab !== "logs" || S.logPaused || document.hidden) return;
+  try {
+    const r = await api(`/api/logs?after=${S.lastLog}&level=DEBUG&limit=1000`);
+    if (r.lines.length) { S.logs.push(...r.lines); if (S.logs.length > 3000) S.logs.splice(0, S.logs.length - 3000); S.lastLog = r.last_id; paintLogs(); }
+  } catch (_) { /* transient */ }
+}
+
+/* ---------- shell ---------- */
+function renderNav() {
+  const nav = $("#nav"); nav.replaceChildren(...TABS.map(([id, label]) =>
+    h("button", { "data-tab": id, class: S.tab === id ? "on" : "", onclick: () => go(id) }, label)));
+  renderNavBadge();
+}
+function go(tab) {
+  if (S.tab === "dashboard" && tab !== "dashboard") S.notice = null;
+  S.tab = tab; render();
+  if (["mqtt", "channels", "device"].includes(tab) && !S.draft && !S.settingsLoading) loadSettings();
+  if (tab === "logs") pollLogs();
+  if (tab === "nodes") pollNodes();
+}
+function render() {
+  renderNav();
+  const main = $("#main"); let v;
+  if (S.tab === "dashboard") v = viewDashboard();
+  else if (S.tab === "nodes") v = viewNodes();
+  else if (S.tab === "mqtt") v = needSettings(viewMqtt);
+  else if (S.tab === "channels") v = needSettings(viewChannels);
+  else if (S.tab === "device") v = needSettings(viewDevice);
+  else v = viewLogs();
+  main.replaceChildren(v);
+  const hb = $("#hintbox"); if (hb) fillHints(hb);
+  refreshMarks();
+}
+function renderHeader() {
+  const st = S.status, pill = $("#pill"), t = $("#pilltext");
+  let cls = "", txt = "Loading";
+  if (S.statusErr) { cls = "bad"; txt = "Service unreachable"; }
+  else if (st) {
+    if (st.state === "connected") { cls = st.broker_connected ? "ok" : "warn"; txt = st.broker_connected ? "Node connected · MQTT up" : "Node connected · MQTT down"; }
+    else if (st.state === "connecting") { cls = "warn"; txt = "Connecting to node..."; }
+    else if (st.state === "waiting") { cls = "bad"; txt = "Node not connected"; }
+    else { txt = st.state; }
+  }
+  pill.className = "pill " + cls; t.textContent = txt;
+  const n = st && st.node; $("#nodename").textContent = n && n.long_name ? n.long_name : "";
+}
+
+async function loadSettings() {
+  if (S.settingsLoading) return; S.settingsLoading = true; S.settingsErr = null;
+  try { S.orig = await api("/api/settings"); S.draft = newDraft(S.orig); S.awaitReload = false; }
+  catch (e) { S.settingsErr = e.message; }
+  S.settingsLoading = false;
+  if (["mqtt", "channels", "device"].includes(S.tab)) render();
+  renderSaveBar();
+}
+
+let lastState = null;
+async function pollStatus() {
+  if (document.hidden) return;
+  try {
+    S.status = await api("/api/status"); S.statusErr = null;
+    if (S.status.state === "connected" && lastState !== "connected") {
+      // The node (re)connected: refresh settings unless the user is mid-edit.
+      if (!S.draft || (S.awaitReload && countChanges(buildPayload()) === 0)) { S.orig = null; S.draft = null; S.settingsErr = null; if (["mqtt", "channels", "device"].includes(S.tab)) loadSettings(); }
+      if (S.notice && S.awaitReload) { S.notice = { kind: "ok", text: "The node rebooted and the proxy has reconnected. Your changes are active.", warnings: [] }; S.awaitReload = false; }
+    }
+    lastState = S.status.state;
+  } catch (e) { S.statusErr = e.message; }
+  renderHeader();
+  if (S.tab === "dashboard") render();
+  else if (S.settingsErr && S.status && S.status.state === "connected" && ["mqtt", "channels", "device"].includes(S.tab)) loadSettings();
+}
+
+render(); renderHeader();
+pollStatus(); setInterval(pollStatus, 2500); setInterval(pollLogs, 2000); setInterval(pollNodes, 10000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pollStatus(); });
+</script>
+</body>
+</html>

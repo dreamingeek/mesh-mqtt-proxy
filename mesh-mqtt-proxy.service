@@ -1,0 +1,23 @@
+[Unit]
+Description=Meshtastic MQTT client proxy (BLE)
+After=bluetooth.target network-online.target
+Wants=bluetooth.target network-online.target
+
+[Service]
+Type=simple
+User=meshproxy
+Group=meshproxy
+SupplementaryGroups=bluetooth
+WorkingDirectory=/opt/mesh-mqtt-proxy
+ExecStart=/opt/mesh-mqtt-proxy/venv/bin/python /opt/mesh-mqtt-proxy/mesh_mqtt_proxy.py --config /etc/mesh-mqtt-proxy.toml
+Restart=always
+RestartSec=10
+
+# Light hardening; BLE goes over D-Bus to bluetoothd so no device access is needed.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,61 @@
+# mesh-mqtt-proxy configuration.  Copy to config.toml (or /etc/mesh-mqtt-proxy.toml).
+
+[radio]
+# BLE MAC address of the node, or its advertised name (e.g. "Meshtastic_a1b2").
+# Find it with:  python mesh_mqtt_proxy.py --scan
+address = "AA:BB:CC:DD:EE:FF"
+# Seconds to wait for the BLE connection plus the node's config download.
+connect_timeout = 90
+# Download the node list from the node (needed for the web UI's Nodes tab).  It
+# adds some seconds to every (re)connect over Bluetooth.  Left unset, it is on when
+# the web UI is enabled and off otherwise.
+# load_nodes = true
+
+[bridge]
+# Uplink (node -> broker) is always on: that is what carries Map Reports.
+# Downlink (broker -> node) is off by default.  Turn it on only if you want
+# the node to *receive* MQTT traffic (e.g. bridging two meshes).  On a busy
+# public broker this can flood a BLE link, and the node must also have
+# "downlink" enabled on the channel.
+downlink = false
+downlink_queue = 200
+
+# Extra topics to subscribe to when downlink = true, e.g. direct-message
+# traffic.  Left empty on purpose; see README.
+extra_subscriptions = []
+
+# Seconds between BLE keepalives; a failed keepalive triggers a reconnect.
+heartbeat_interval = 60
+# Reconnect backoff bounds (seconds).
+reconnect_min = 5
+reconnect_max = 120
+# How often to log uplink/downlink counters (seconds).
+stats_interval = 300
+
+# Everything below is normally read from the node's own MQTT settings.
+# Uncomment a line only to override what the node says.
+[broker]
+# host     = "mqtt.meshtastic.org"
+# port     = 1883
+# tls      = false
+# username = "meshdev"       # the public server's published, shared credentials
+# password = "large4cats"
+# root     = "msh/US"
+
+# Local web interface: dashboard, live logs, and editing the node's MQTT / map /
+# channel settings.  It runs inside this service so it can share the single
+# Bluetooth connection the node allows.  Off unless enabled = true.
+[web]
+enabled  = false
+# "127.0.0.1" = this machine only.  Use "0.0.0.0" to reach it from your LAN, which
+# REQUIRES a password (the UI refuses to start on the network without one).
+host     = "127.0.0.1"
+port     = 8080
+username = "admin"
+password = ""
+# Log lines kept in memory for the Logs tab.
+log_lines = 3000
+# Distances on the Nodes tab are measured from your node's own position.  If it has
+# none (no GPS and no fixed position), set one here instead.
+# latitude  = 12.3456
+# longitude = -98.7654
